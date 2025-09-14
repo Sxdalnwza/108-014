@@ -1,0 +1,287 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+  <title>Block Blast Game</title>
+  <link href="https://fonts.googleapis.com/css2?family=Fredoka+One&display=swap" rel="stylesheet">
+  <style>
+    * {
+      box-sizing: border-box;
+    }
+
+    body {
+      font-family: 'Fredoka One', cursive;
+      background: linear-gradient(180deg, #e0f7fa, #ffffff);
+      margin: 0;
+      padding: 0;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      min-height: 100vh;
+    }
+
+    h1 {
+      margin-top: 30px;
+      font-size: 2.5rem;
+      color: #ff4081;
+      text-shadow: 1px 1px 2px #888;
+    }
+
+    #score {
+      font-size: 1.5rem;
+      color: #3e4a61;
+      margin: 10px;
+    }
+
+    #status {
+      font-size: 1.2rem;
+      margin: 10px;
+      color: #444;
+    }
+
+    #game {
+      display: grid;
+      grid-template-columns: repeat(9, 48px);
+      grid-template-rows: repeat(9, 48px);
+      gap: 4px;
+      background: #b2ebf2;
+      padding: 10px;
+      border-radius: 12px;
+      box-shadow: 0 0 15px rgba(0,0,0,0.1);
+    }
+
+    .cell {
+      width: 48px;
+      height: 48px;
+      background: #e0f2f1;
+      border-radius: 8px;
+      transition: background 0.2s ease;
+      box-shadow: inset 0 0 4px rgba(0,0,0,0.1);
+    }
+
+    .filled {
+      background: #ffca28 !important;
+      animation: pop 0.3s ease;
+    }
+
+    @keyframes pop {
+      0% { transform: scale(0.8); }
+      100% { transform: scale(1); }
+    }
+
+    #pieces {
+      display: flex;
+      justify-content: center;
+      gap: 30px;
+      margin: 30px 0;
+      flex-wrap: wrap;
+    }
+
+    .piece {
+      display: grid;
+      grid-template-columns: repeat(3, 24px);
+      grid-template-rows: repeat(3, 24px);
+      gap: 3px;
+      cursor: grab;
+      padding: 10px;
+      background: #ffffff;
+      border-radius: 10px;
+      box-shadow: 0 4px 10px rgba(0,0,0,0.15);
+      transition: transform 0.2s ease;
+    }
+
+    .piece:hover {
+      transform: scale(1.05);
+    }
+
+    .block {
+      width: 24px;
+      height: 24px;
+      background: #4caf50;
+      border-radius: 5px;
+      box-shadow: inset 0 0 3px rgba(0,0,0,0.2);
+    }
+
+    @media (max-width: 600px) {
+      #game {
+        transform: scale(0.8);
+      }
+    }
+  </style>
+</head>
+<body>
+  <h1>Block Blast</h1>
+  <div id="score">Score: 0</div>
+  <div id="status">🎯 Drag and drop a piece into the grid</div>
+  <div id="game"></div>
+  <div id="pieces"></div>
+
+  <script>
+    const gridSize = 9;
+    const game = document.getElementById("game");
+    const status = document.getElementById("status");
+    const scoreElement = document.getElementById("score");
+    const piecesContainer = document.getElementById("pieces");
+    let score = 0;
+
+    let grid = [];
+    for (let i = 0; i < gridSize * gridSize; i++) {
+      const cell = document.createElement("div");
+      cell.classList.add("cell");
+      game.appendChild(cell);
+      grid.push(cell);
+    }
+
+    const shapes = [
+      [[1, 0, 0],[1, 0, 0],[1, 0, 0]],
+      [[1, 1, 0],[0, 1, 0],[0, 0, 0]],
+      [[1, 1, 1],[0, 0, 0],[0, 0, 0]],
+      [[1, 1, 0],[1, 1, 0],[0, 0, 0]],
+      [[1, 1, 1],[1, 0, 0],[0, 0, 0]],
+    ];
+
+    let currentPieces = [];
+
+    function updateScore(points) {
+      score += points;
+      scoreElement.textContent = "Score: " + score;
+    }
+
+    function countBlocks(shape) {
+      return shape.flat().filter(v => v).length;
+    }
+
+    function createPieces() {
+      piecesContainer.innerHTML = "";
+      currentPieces = [];
+
+      for (let s = 0; s < 3; s++) {
+        const shape = shapes[Math.floor(Math.random() * shapes.length)];
+        const piece = document.createElement("div");
+        piece.classList.add("piece");
+        piece.dataset.shape = JSON.stringify(shape);
+
+        shape.flat().forEach((v) => {
+          const block = document.createElement("div");
+          if (v) block.classList.add("block");
+          piece.appendChild(block);
+        });
+
+        piece.draggable = true;
+        piece.addEventListener("dragstart", (e) => {
+          e.dataTransfer.setData("text/plain", piece.dataset.shape);
+        });
+
+        piecesContainer.appendChild(piece);
+        currentPieces.push(piece);
+      }
+    }
+
+    createPieces();
+
+    game.addEventListener("dragover", (e) => {
+      e.preventDefault();
+    });
+
+    game.addEventListener("drop", (e) => {
+      const shape = JSON.parse(e.dataTransfer.getData("text/plain"));
+      const rect = game.getBoundingClientRect();
+      const cellSize = 52;
+      const x = Math.floor((e.clientX - rect.left) / cellSize);
+      const y = Math.floor((e.clientY - rect.top) / cellSize);
+
+      if (canPlace(shape, x, y)) {
+        placeBlock(shape, x, y);
+        updateScore(countBlocks(shape) * 10);
+        checkAndClearLines();
+        removeUsedPiece(shape);
+        if (currentPieces.length === 0) createPieces();
+        if (!hasValidMove()) {
+          status.textContent = "💥 Game Over!";
+        } else {
+          status.textContent = "✅ Placed!";
+        }
+      } else {
+        status.textContent = "🚫 Invalid placement!";
+      }
+    });
+
+    function canPlace(shape, x, y) {
+      for (let i = 0; i < 3; i++) {
+        for (let j = 0; j < 3; j++) {
+          if (shape[i][j]) {
+            const gx = x + j;
+            const gy = y + i;
+            if (gx < 0 || gy < 0 || gx >= gridSize || gy >= gridSize) return false;
+            const idx = gy * gridSize + gx;
+            if (grid[idx].classList.contains("filled")) return false;
+          }
+        }
+      }
+      return true;
+    }
+
+    function placeBlock(shape, x, y) {
+      for (let i = 0; i < 3; i++) {
+        for (let j = 0; j < 3; j++) {
+          if (shape[i][j]) {
+            const gx = x + j;
+            const gy = y + i;
+            const idx = gy * gridSize + gx;
+            grid[idx].classList.add("filled");
+          }
+        }
+      }
+    }
+
+    function checkAndClearLines() {
+      for (let i = 0; i < gridSize; i++) {
+        if (isLineFilled(i * gridSize, 1)) {
+          clearLine(i * gridSize, 1);
+          updateScore(100);
+        }
+        if (isLineFilled(i, gridSize)) {
+          clearLine(i, gridSize);
+          updateScore(100);
+        }
+      }
+    }
+
+    function isLineFilled(start, step) {
+      for (let i = 0; i < gridSize; i++) {
+        if (!grid[start + i * step].classList.contains("filled")) return false;
+      }
+      return true;
+    }
+
+    function clearLine(start, step) {
+      for (let i = 0; i < gridSize; i++) {
+        grid[start + i * step].classList.remove("filled");
+      }
+    }
+
+    function removeUsedPiece(shape) {
+      currentPieces = currentPieces.filter(piece => {
+        if (JSON.stringify(shape) === piece.dataset.shape) {
+          piece.remove();
+          return false;
+        }
+        return true;
+      });
+    }
+
+    function hasValidMove() {
+      return currentPieces.some(piece => {
+        const shape = JSON.parse(piece.dataset.shape);
+        for (let y = 0; y <= gridSize - 3; y++) {
+          for (let x = 0; x <= gridSize - 3; x++) {
+            if (canPlace(shape, x, y)) return true;
+          }
+        }
+        return false;
+      });
+    }
+  </script>
+</body>
+</html>
